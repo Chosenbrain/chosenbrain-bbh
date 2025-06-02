@@ -1,0 +1,71 @@
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+
+# Ignore virtual environments
+venv/
+env/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore model weights and fine-tuned files
+*.pt
+*.h5
+*.ckpt
+fine_tuned_securebert/
+
+# Ignore secrets and keys
+.env
+*.key
+*.pem
+
+# Ignore token or cookie files
+cookies/
+*.session
+*.sqlite
+
+# Ignore output and debug files
+*.bak
+*.swp
+*.tmp
+*.out
+
+# Ignore Nuclei binaries if recompiled
+nuclei_*/nuclei*
+
+# Ignore BurpSuite binary and project files
+burpsuite_pro*.jar
+*.burp
+
+# Ignore CSV training/test files
+train.csv
+test.csv
+
+# Ignore compiled extensions
+*.so
+
+# Ignore auto-generated submission files
+*.zip
+*.tar.gz
+*.egg-info/
+
+# Jupyter/IPython notebooks (if any)
+*.ipynb_checkpoints
+
+# IDE files
+.vscode/
+.idea/
+
+# Mac-specific files
+.DS_Store
+
+# System logs
+nohup.out

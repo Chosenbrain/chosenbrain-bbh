@@ -1,0 +1,58 @@
+# === Web & Backend ===
+Flask==3.1.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+Flask-WTF==1.2.2
+gunicorn==23.0.0
+
+# === Env & Config ===
+python-dotenv==1.1.0
+
+# === Database ===
+psycopg2-binary==2.9.10
+
+# === AI & NLP ===
+transformers==4.40.1
+tokenizers==0.19.1
+torch  # Let pip auto-resolve compatible version
+evaluate
+datasets==3.5.0
+scikit-learn
+pandas
+numpy
+openai
+accelerate
+
+# === Task Queue ===
+celery[redis]==5.2.7
+redis==5.2.1
+
+# === Bots & Notifications ===
+python-telegram-bot==22.0
+discord-webhook==1.4.1
+
+# === Utilities ===
+requests
+tqdm
+fsspec<=2024.12.0
+pyarrow>=15.0.0
+dill
+xxhash
+multiprocess
+aiohttp
+attrs
+frozenlist
+yarl
+click
+itsdangerous
+blinker
+wtforms
+MarkupSafe
+Jinja2
+Werkzeug
+python-dateutil
+pytz
+tzdata
+httpx
+openapi-spec-validator
+playwright

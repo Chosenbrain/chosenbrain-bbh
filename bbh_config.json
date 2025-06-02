@@ -1,0 +1,12 @@
+{
+  "project_options": {
+    "connections": {
+      "timeout": 15
+    }
+  },
+  "scanner": {
+    "active_scanning": {
+      "enabled": true
+    }
+  }
+}
