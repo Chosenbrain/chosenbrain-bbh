@@ -1,4 +1,3 @@
-
 import subprocess
 import os
 import tempfile
@@ -9,12 +8,6 @@ logger = logging.getLogger(__name__)
 def run_nuclei_scan(url: str) -> str:
     """
     Scans a URL using Nuclei and returns raw results as text.
-
-    Args:
-        url (str): The target URL (e.g., https://example.com)
-
-    Returns:
-        str: Nuclei scan output or fallback message
     """
     try:
         with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix=".txt") as tmp_in:
@@ -26,18 +19,18 @@ def run_nuclei_scan(url: str) -> str:
 
         logger.info(f"🔎 Scanning {url} with Nuclei...")
 
-        # Adjust -t for template directory if needed, or remove to use default
         cmd = [
             "nuclei",
             "-l", tmp_in_path,
             "-o", tmp_out_path,
+            "-t", "/root/nuclei-templates",  # ✅ Use your actual templates
             "-severity", "medium,high,critical",
-            "-nc",  # no color
+            "-nc",
             "-timeout", "30",
             "-c", "50"
         ]
 
-        subprocess.run(cmd, timeout=1200, check=True) 
+        subprocess.run(cmd, timeout=1200, check=True)
 
         with open(tmp_out_path, "r") as f:
             output = f.read().strip()
