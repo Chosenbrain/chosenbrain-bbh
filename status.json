@@ -1,6 +1,6 @@
 {
-  "state": "scanning",
-  "target": "2606:4700::6811:5a22:443 (Cloudflare, Inc.)",
+  "state": "idle",
+  "target": "170.153.144.3:443 (Ceridian Employer Services)",
   "platform": "hackerone",
-  "started_at": "2025-06-07 17:25:51.175053"
+  "finished_at": "2025-06-07 17:32:01.153163"
 }
