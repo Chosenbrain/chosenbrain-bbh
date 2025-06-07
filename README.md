@@ -85,21 +85,6 @@ This project is designed to simulate a real autonomous bug bounty hunter — one
 📜 License
 MIT License — Free to use, modify, and deploy. Credit appreciated.
 
-👤 Maintained by
-Chosen Abdullahi
-🔗 chosenbrain.com
-💬 Telegram: @Masterkendra
-
-yaml
-Copy
-Edit
-
----
-
-Would you like me to:
-- Save this as a `README.md` file locally?
-- Automatically commit and push it to your GitHub repo?
-
 
 
 
