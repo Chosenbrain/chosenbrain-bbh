@@ -1,6 +1,9 @@
 import os
+import re
 import requests
+import shutil
 from dotenv import load_dotenv
+from source_code_scanner import scan_repo_for_vulns
 
 load_dotenv()
 
@@ -11,6 +14,9 @@ hackerone_index = 0
 intigriti_index = 0
 
 BATCH_SIZE = 5
+TEMP_REPO_DIR = "temp_repo_scan"
+
+GITHUB_REPO_REGEX = re.compile(r"https?://github.com/[\w.-]+/[\w.-]+")
 
 def fetch_hackerone_programs():
     global hackerone_cache
@@ -35,7 +41,8 @@ def fetch_hackerone_programs():
             handle = item.get("attributes", {}).get("handle")
             submission_status = item.get("attributes", {}).get("submission_state")
             if handle and submission_status == "open":
-                programs.append(handle)
+                url = f"https://hackerone.com/{handle}"
+                programs.append(url)
 
         hackerone_cache = programs
         return programs
@@ -98,6 +105,20 @@ def fetch_intigriti_programs():
         print(f"Raw Response: {response.text}")
         return []
 
+def extract_and_scan_repos(program_urls):
+    scanned_targets = []
+    for url in program_urls:
+        match = GITHUB_REPO_REGEX.search(url)
+        if match:
+            repo_url = match.group()
+            print(f"🧠 Found GitHub repo: {repo_url}. Cloning and scanning...")
+            try:
+                scan_repo_for_vulns(repo_url, TEMP_REPO_DIR)
+            finally:
+                shutil.rmtree(TEMP_REPO_DIR, ignore_errors=True)
+        scanned_targets.append(url)
+    return scanned_targets
+
 def get_all_live_targets():
     global hackerone_index, intigriti_index
 
@@ -114,13 +135,15 @@ def get_all_live_targets():
     if isinstance(hackerone_cache, list) and hackerone_cache:
         start = hackerone_index
         end = start + BATCH_SIZE
-        targets["hackerone"] = hackerone_cache[start:end]
+        urls = hackerone_cache[start:end]
+        targets["hackerone"] = extract_and_scan_repos(urls)
         hackerone_index = end if end < len(hackerone_cache) else 0
 
     if isinstance(intigriti_cache, list) and intigriti_cache:
         start = intigriti_index
         end = start + BATCH_SIZE
-        targets["intigriti"] = intigriti_cache[start:end]
+        urls = intigriti_cache[start:end]
+        targets["intigriti"] = extract_and_scan_repos(urls)
         intigriti_index = end if end < len(intigriti_cache) else 0
 
     return targets

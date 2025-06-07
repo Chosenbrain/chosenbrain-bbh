@@ -23,6 +23,7 @@ from factory import create_app
 from notifications import alert, send_bug_report
 from deep_scanner import run_wapiti_scan, run_nikto_scan, run_sqlmap_scan
 from telegram_bot import telegram_app as telegram_bot
+from source_code_scanner import scan_repo_for_vulns  # 🧠 New addition
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -102,7 +103,7 @@ def run_burp_scan(url):
 
 def run_all_deep_scanners(url: str) -> dict:
     logger.info(f"Running all deep scanners on {url}")
-    return {
+    scanners = {
         "Burp": run_burp_scan(url),
         "Payloads": inject_payloads(url),
         "Nuclei": run_nuclei_scan(url),
@@ -110,6 +111,9 @@ def run_all_deep_scanners(url: str) -> dict:
         "Nikto": run_nikto_scan(url),
         "SQLMap": run_sqlmap_scan(url)
     }
+    if "github.com" in url:
+        scanners["SourceCode"] = scan_repo_for_vulns(url)
+    return scanners
 
 def process_asset(url, platform):
     logger.info(f"Scanning asset: {url}")

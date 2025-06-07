@@ -1,6 +1,7 @@
 import os
 import logging
 import requests
+import subprocess
 import time
 from shodan import Shodan
 from bs4 import BeautifulSoup
@@ -15,19 +16,16 @@ client = Shodan(SHODAN_API_KEY)
 
 # ------------------ SHODAN RECON ------------------
 def shodan_search(query: str, max_results: int = 50):
-    # ✅ Clean and format the query for Shodan
-    keyword = query.replace("*.", "").strip()
-    formatted_query = f"hostname:{keyword}"
-    logger.info(f"🔍 Shodan search: {formatted_query}")
+    logger.info(f"🔍 Shodan search: {query}")
     results = []
     try:
-        res = client.search(formatted_query, limit=max_results)
+        res = client.search(query, limit=max_results)
         for match in res['matches']:
             ip = match.get('ip_str')
             port = match.get('port')
             org = match.get('org', 'n/a')
-            host = f"http://{ip}:{port}"
-            results.append(host)
+            host = f"{ip}:{port}"
+            results.append(f"{host} ({org})")
     except Exception as e:
         logger.error(f"❌ Shodan error: {e}")
     return results
@@ -40,7 +38,7 @@ def google_dork_search(dork: str, pages: int = 1):
     }
     found = set()
     for page in range(pages):
-        time.sleep(2)  # Avoid being blocked
+        time.sleep(2)
         start = page * 10
         url = f"https://www.google.com/search?q={dork}&start={start}"
         try:
@@ -56,23 +54,56 @@ def google_dork_search(dork: str, pages: int = 1):
             logger.warning(f"⚠️ Dork scrape failed on page {page}: {e}")
     return list(found)
 
-# ------------------ COMBINED LOGIC ------------------
+# ------------------ SUBFINDER ------------------
+def subfinder_scan(domain: str):
+    logger.info(f"🤖 Subfinder scanning: {domain}")
+    try:
+        result = subprocess.check_output(["subfinder", "-d", domain, "-silent"], stderr=subprocess.DEVNULL)
+        return result.decode().splitlines()
+    except Exception as e:
+        logger.warning(f"Subfinder failed: {e}")
+        return []
+
+# ------------------ HAKRAWLER ------------------
+def hakrawler_scan(domain: str):
+    logger.info(f"🤖 Hakrawler scanning: {domain}")
+    try:
+        result = subprocess.check_output(["hakrawler", "-url", f"https://{domain}", "-depth", "1"], stderr=subprocess.DEVNULL)
+        return result.decode().splitlines()
+    except Exception as e:
+        logger.warning(f"Hakrawler failed: {e}")
+        return []
+
+# ------------------ ARJUN ------------------
+def arjun_scan(domain: str):
+    logger.info(f"🔍 Arjun scanning: {domain}")
+    try:
+        result = subprocess.check_output(["python3", "~/Arjun/arjun.py", "--urls", f"https://{domain}"], stderr=subprocess.DEVNULL)
+        return result.decode().splitlines()
+    except Exception as e:
+        logger.warning(f"Arjun failed: {e}")
+        return []
+
+# ------------------ COMBINED RECON ------------------
 def recon_domain(keyword: str):
     logger.info(f"🌐 Recon on keyword: {keyword}")
     shodan_results = shodan_search(keyword)
     dork_results = google_dork_search(f"site:{keyword}")
-    combined = list(set(shodan_results + dork_results))
+    subfinder_results = subfinder_scan(keyword)
+    hakrawler_results = hakrawler_scan(keyword)
+    arjun_results = arjun_scan(keyword)
+
+    combined = list(set(shodan_results + dork_results + subfinder_results + hakrawler_results + arjun_results))
     logger.info(f"🔎 Found {len(combined)} unique assets.")
     return combined
 
-# ✅ This is the function used by submission_orchestrator.py
+# ✅ Required by submission orchestrator
 def discover_assets(scope: str) -> list:
     return recon_domain(scope)
 
-# For standalone testing
+# Test run
 if __name__ == "__main__":
     test_scope = "tesla.com"
     assets = discover_assets(test_scope)
     for asset in assets:
         print(" -", asset)
-
