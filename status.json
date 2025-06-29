@@ -1,6 +1,6 @@
 {
   "state": "scanning",
-  "target": "https://registry.gitlab.com/fair-for-fusion/tools/filter_similar",
+  "target": "http://registry.gitlab.com/me/my-project:slim",
   "platform": "hackerone",
-  "started_at": "2025-06-29 21:30:57.976609"
+  "started_at": "2025-06-29 21:45:50.115297"
 }
