@@ -1,6 +1,6 @@
 {
   "state": "scanning",
-  "target": "https://accounts.google.com/ServiceLogin%3Fcontinue%3Dhttps://www.google.com/search%253Fq%253Dsite:https://app.intigriti.com/auth/dashboard%25253Fredirect%25253D/programs/wl/wirelesslogic/detail%2526start%253D0%26hl%3Den&opi=89978449",
-  "platform": "intigriti",
-  "started_at": "2025-06-07 17:42:17.351490"
+  "target": "https://registry.gitlab.com/fair-for-fusion/tools/filter_similar",
+  "platform": "hackerone",
+  "started_at": "2025-06-29 21:30:57.976609"
 }

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Manual Source Code Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 2rem; background-color: #0f0f0f; color: #e5e5e5; }
+        #progressLog { white-space: pre-wrap; background: #1a1a1a; color: #10b981; padding: 1rem; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; }
+        label, h5, h2, p { color: #e5e5e5; }
+        .btn-primary { background-color: #10b981; border-color: #10b981; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 class="mb-4">🛠️ Manual Source Code Scanner</h2>
+
+    <div class="mb-3">
+        <label for="repoUrl" class="form-label">Enter GitHub/GitLab Repo URL</label>
+        <input type="url" class="form-control" id="repoUrl" placeholder="https://github.com/your/project">
+    </div>
+
+    <button id="startScan" class="btn btn-primary">Start Scan</button>
+
+    <hr class="my-4">
+
+    <div id="scanStatus" style="display:none;">
+        <h5>Status: <span id="statusLabel">Initializing...</span></h5>
+        <p><strong>Started:</strong> <span id="started">-</span></p>
+        <p><strong>Finished:</strong> <span id="finished">-</span></p>
+        <div id="progressLog"></div>
+        <button id="viewResults" class="btn btn-success mt-3" style="display:none;">View Results</button>
+    </div>
+</div>
+
+<script>
+    const startBtn = document.getElementById("startScan");
+    const repoUrlInput = document.getElementById("repoUrl");
+    const scanStatusDiv = document.getElementById("scanStatus");
+    const statusLabel = document.getElementById("statusLabel");
+    const startedSpan = document.getElementById("started");
+    const finishedSpan = document.getElementById("finished");
+    const progressLog = document.getElementById("progressLog");
+    const viewResultsBtn = document.getElementById("viewResults");
+
+    let currentScanId = null;
+    let pollInterval = null;
+
+    startBtn.addEventListener("click", () => {
+        const url = repoUrlInput.value;
+        if (!url) return alert("Please enter a repo URL.");
+
+        fetch("/start_manual_scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ repo_url: url })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`Server Error: ${res.status}\n${errorText}`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            currentScanId = data.scan_id;
+            scanStatusDiv.style.display = "block";
+            statusLabel.textContent = "Starting...";
+            pollInterval = setInterval(updateStatus, 3000);
+        })
+        .catch(err => {
+            alert("Failed to start scan:\n" + err.message);
+            console.error(err);
+        });
+    });
+
+    function updateStatus() {
+        fetch(`/manual_scan_status/${currentScanId}`)
+            .then(res => res.json())
+            .then(data => {
+                statusLabel.textContent = data.status;
+                startedSpan.textContent = data.started || "-";
+                finishedSpan.textContent = data.finished || "-";
+                progressLog.textContent = (data.progress || []).join("\n");
+
+                if (data.status === "done" || data.status === "error") {
+                    clearInterval(pollInterval);
+                    viewResultsBtn.style.display = "inline-block";
+                }
+            })
+            .catch(err => {
+                console.error("Status update failed", err);
+                clearInterval(pollInterval);
+            });
+    }
+
+    viewResultsBtn.addEventListener("click", () => {
+        if (!currentScanId) return;
+        window.open(`/manual_scan_results/${currentScanId}`, "_blank");
+    });
+</script>
+</body>
+</html>

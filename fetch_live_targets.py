@@ -1,26 +1,19 @@
 import os
 import re
 import requests
-import shutil
+import random
 from dotenv import load_dotenv
-from source_code_scanner import scan_repo_for_vulns
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
 hackerone_cache = []
 intigriti_cache = []
 
-hackerone_index = 0
-intigriti_index = 0
-
-BATCH_SIZE = 5
-TEMP_REPO_DIR = "temp_repo_scan"
-
-GITHUB_REPO_REGEX = re.compile(r"https?://github.com/[\w.-]+/[\w.-]+")
 
 def fetch_hackerone_programs():
     global hackerone_cache
-
     username = os.getenv("HACKERONE_USERNAME")
     token = os.getenv("HACKERONE_API_TOKEN")
     if not username or not token:
@@ -28,32 +21,60 @@ def fetch_hackerone_programs():
         return []
 
     url = "https://api.hackerone.com/v1/hackers/programs?page[size]=100"
-    auth = (username, token)
     headers = {"Accept": "application/json"}
+    auth = (username, token)
 
     try:
         response = requests.get(url, auth=auth, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
-
         programs = []
-        for item in data.get("data", []):
-            handle = item.get("attributes", {}).get("handle")
-            submission_status = item.get("attributes", {}).get("submission_state")
-            if handle and submission_status == "open":
-                url = f"https://hackerone.com/{handle}"
-                programs.append(url)
 
+        for item in response.json().get("data", []):
+            handle = item.get("attributes", {}).get("handle")
+            submission_state = item.get("attributes", {}).get("submission_state")
+            if handle and submission_state == "open":
+                programs.append(f"https://hackerone.com/{handle}")
         hackerone_cache = programs
         return programs
-
-    except requests.RequestException as e:
-        print(f"HackerOne fetch error: {e}")
+    except Exception as e:
+        print(f"❌ HackerOne fetch error: {e}")
         return []
+
+
+def extract_hackerone_targets(handle_url):
+    username = os.getenv("HACKERONE_USERNAME")
+    token = os.getenv("HACKERONE_API_TOKEN")
+    if not username or not token:
+        print("❌ Missing HackerOne credentials.")
+        return []
+
+    try:
+        handle = handle_url.strip("/").split("/")[-1]
+        api_url = f"https://api.hackerone.com/v1/hackers/programs/{handle}/structured_scopes"
+        headers = {"Accept": "application/json"}
+        auth = (username, token)
+
+        response = requests.get(api_url, auth=auth, headers=headers, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        domains = []
+        for scope in data.get("data", []):
+            attr = scope.get("attributes", {})
+            if attr.get("eligible_for_submission") and attr.get("asset_type") == "URL":
+                asset = attr.get("asset_identifier", "")
+                domain = urlparse(asset).netloc or asset
+                if domain:
+                    domains.append(domain.lower())
+        return list(set(domains))
+
+    except Exception as e:
+        print(f"❌ Error fetching H1 targets for {handle_url}: {e}")
+        return []
+
 
 def fetch_intigriti_programs():
     global intigriti_cache
-
     token = os.getenv("INTIGRITI_API_TOKEN")
     if not token:
         print("❌ INTIGRITI_API_TOKEN not set.")
@@ -68,82 +89,63 @@ def fetch_intigriti_programs():
     try:
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-
-        if "application/json" not in response.headers.get("Content-Type", ""):
-            print("❌ Intigriti response is not JSON.")
-            print(f"Raw Response: {response.text}")
-            return []
-
         data = response.json()
-
-        if not isinstance(data, dict) or "records" not in data:
-            print("❌ Intigriti response format unexpected.")
-            print(f"Raw Data: {data}")
-            return []
-
-        records = data["records"]
-        if not isinstance(records, list):
-            print("❌ Intigriti 'records' field is not a list.")
-            print(f"Raw Records: {records}")
-            return []
-
-        programs = [
-            program.get("webLinks", {}).get("detail", program.get("handle", ""))
-            for program in records
-            if isinstance(program, dict)
-        ]
-
+        programs = [(r["programId"], r.get("webLinks", {}).get("detail", "")) for r in data.get("records", []) if r.get("programId")]
         intigriti_cache = programs
         return programs
-
-    except requests.RequestException as e:
-        print(f"Intigriti fetch error: {e}")
-        print(f"Raw Response: {getattr(e.response, 'text', 'No response')}")
-        return []
-    except ValueError as e:
-        print(f"Intigriti JSON decode error: {e}")
-        print(f"Raw Response: {response.text}")
+    except Exception as e:
+        print(f"❌ Intigriti fetch error: {e}")
         return []
 
-def extract_and_scan_repos(program_urls):
-    scanned_targets = []
-    for url in program_urls:
-        match = GITHUB_REPO_REGEX.search(url)
-        if match:
-            repo_url = match.group()
-            print(f"🧠 Found GitHub repo: {repo_url}. Cloning and scanning...")
-            try:
-                scan_repo_for_vulns(repo_url, TEMP_REPO_DIR)
-            finally:
-                shutil.rmtree(TEMP_REPO_DIR, ignore_errors=True)
-        scanned_targets.append(url)
-    return scanned_targets
 
-def get_all_live_targets():
-    global hackerone_index, intigriti_index
+def extract_intigriti_targets(program_id):
+    token = os.getenv("INTIGRITI_API_TOKEN")
+    if not token:
+        return []
 
-    targets = {
-        "hackerone": [],
-        "intigriti": []
+    url = f"https://api.intigriti.com/external/researcher/v1/programs/{program_id}/assets"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
     }
 
-    if not isinstance(hackerone_cache, list) or not hackerone_cache:
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        domains = []
+        for asset in data.get("assets", []):
+            if asset.get("type") == "URL" and asset.get("eligibleForSubmission"):
+                domain = urlparse(asset.get("endpoint", "")).netloc
+                if domain:
+                    domains.append(domain.lower())
+        return list(set(domains))
+    except Exception as e:
+        print(f"❌ Intigriti asset fetch failed for {program_id}: {e}")
+        return []
+
+
+def get_all_live_targets():
+    targets = {"hackerone": [], "intigriti": []}
+
+    if not hackerone_cache:
         fetch_hackerone_programs()
-    if not isinstance(intigriti_cache, list) or not intigriti_cache:
+    if not intigriti_cache:
         fetch_intigriti_programs()
 
-    if isinstance(hackerone_cache, list) and hackerone_cache:
-        start = hackerone_index
-        end = start + BATCH_SIZE
-        urls = hackerone_cache[start:end]
-        targets["hackerone"] = extract_and_scan_repos(urls)
-        hackerone_index = end if end < len(hackerone_cache) else 0
+    if hackerone_cache:
+        selected = random.choice(hackerone_cache)
+        print(f"🏆 Randomly selected H1 program: {selected}")
+        targets["hackerone"] = extract_hackerone_targets(selected)
+        if not targets["hackerone"]:
+            print("⚠️ No targets extracted from selected H1 program.")
 
-    if isinstance(intigriti_cache, list) and intigriti_cache:
-        start = intigriti_index
-        end = start + BATCH_SIZE
-        urls = intigriti_cache[start:end]
-        targets["intigriti"] = extract_and_scan_repos(urls)
-        intigriti_index = end if end < len(intigriti_cache) else 0
+    if intigriti_cache:
+        selected_id, detail_url = random.choice(intigriti_cache)
+        print(f"🏆 Randomly selected Intigriti program: {detail_url}")
+        targets["intigriti"] = extract_intigriti_targets(selected_id)
+        if not targets["intigriti"]:
+            print("⚠️ No targets extracted from selected Intigriti program.")
 
     return targets

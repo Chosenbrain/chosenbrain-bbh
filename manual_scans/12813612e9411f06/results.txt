@@ -1,0 +1,105 @@
+
+
+--- BANDIT ---
+{
+  "errors": [
+    {
+      "filename": "././manual_scans/12813612e9411f06/repo",
+      "reason": "No such file or directory"
+    }
+  ],
+  "generated_at": "2025-06-13T03:18:48Z",
+  "metrics": {
+    "_totals": {
+      "CONFIDENCE.HIGH": 0,
+      "CONFIDENCE.LOW": 0,
+      "CONFIDENCE.MEDIUM": 0,
+      "CONFIDENCE.UNDEFINED": 0,
+      "SEVERITY.HIGH": 0,
+      "SEVERITY.LOW": 0,
+      "SEVERITY.MEDIUM": 0,
+      "SEVERITY.UNDEFINED": 0,
+      "loc": 0,
+      "nosec": 0,
+      "skipped_tests": 0
+    }
+  },
+  "results": []
+}[main]	INFO	profile include tests: None
+[main]	INFO	profile exclude tests: None
+[main]	INFO	cli include tests: None
+[main]	INFO	cli exclude tests: None
+
+
+--- SEMGREP ---
+{"version":"1.124.0","results":[],"errors":[{"code":2,"level":"error","type":"SemgrepError","message":"Invalid scanning root: manual_scans/12813612e9411f06/repo"}],"paths":{"scanned":[]},"skipped_rules":[]}
+
+
+--- GITLEAKS ---
+[90m3:19AM[0m [31mFTL[0m [1mstat ./manual_scans/12813612e9411f06/repo: no such file or directory[0m
+
+
+--- TRUFFLEHOG ---
+🐷🔑🐷  TruffleHog. Unearth your secrets. 🐷🔑🐷
+
+2025-06-13T03:19:07Z	info-0	trufflehog	running source	{"source_manager_worker_id": "PzReS", "with_units": true}
+2025-06-13T03:19:07Z	error	trufflehog	encountered errors during scan	{"errors": ["lstat manual_scans/12813612e9411f06/repo: no such file or directory"]}
+2025-06-13T03:19:07Z	info-0	trufflehog	finished scanning	{"chunks": 0, "bytes": 0, "verified_secrets": 0, "unverified_secrets": 0, "scan_duration": "983.181µs", "trufflehog_version": "dev", "verification_caching": {"Hits":0,"Misses":0,"HitsWasted":0,"AttemptsSaved":0,"VerificationTimeSpentMS":0}}
+
+
+--- SLITHER ---
+Traceback (most recent call last):
+  File "/root/chosenbrain-bbh/venv/bin/slither", line 8, in <module>
+    sys.exit(main())
+  File "/root/chosenbrain-bbh/venv/lib/python3.10/site-packages/slither/__main__.py", line 776, in main
+    main_impl(all_detector_classes=detectors, all_printer_classes=printers)
+  File "/root/chosenbrain-bbh/venv/lib/python3.10/site-packages/slither/__main__.py", line 882, in main_impl
+    ) = process_all(filename, args, detector_classes, printer_classes)
+  File "/root/chosenbrain-bbh/venv/lib/python3.10/site-packages/slither/__main__.py", line 96, in process_all
+    compilations = compile_all(target, **vars(args))
+  File "/root/chosenbrain-bbh/venv/lib/python3.10/site-packages/crytic_compile/crytic_compile.py", line 749, in compile_all
+    raise ValueError(f"{str(target)} is not a file or directory.")
+ValueError: ./manual_scans/12813612e9411f06/repo is not a file or directory.
+
+
+--- GOSEC ---
+{
+	"Golang errors": {},
+	"Issues": [],
+	"Stats": {
+		"files": 0,
+		"lines": 0,
+		"nosec": 0,
+		"found": 0
+	},
+	"GosecVersion": "dev"
+}[gosec] 2025/06/13 03:19:07 Including rules: default
+[gosec] 2025/06/13 03:19:07 Excluding rules: default
+[gosec] 2025/06/13 03:19:07 Including analyzers: default
+[gosec] 2025/06/13 03:19:07 Excluding analyzers: default
+[gosec] 2025/06/13 03:19:07 Import directory: /root/chosenbrain-bbh/manual_scans/12813612e9411f06/repo
+[x] gosec error: Expecting value: line 1 column 1 (char 0)
+
+
+--- ESLINT ---
+[x] eslint not installed.
+
+
+--- DOCKLE ---
+[x] dockle not installed.
+
+
+--- TFSEC ---
+Error: failed to access provided path: stat /root/chosenbrain-bbh/manual_scans/12813612e9411f06/repo/manual_scans/12813612e9411f06/repo: no such file or directory
+
+======================================================
+tfsec is joining the Trivy family
+
+tfsec will continue to remain available 
+for the time being, although our engineering 
+attention will be directed at Trivy going forward.
+
+You can read more here: 
+https://github.com/aquasecurity/tfsec/discussions/1994
+======================================================
+[x] tfsec error: Expecting value: line 1 column 1 (char 0)

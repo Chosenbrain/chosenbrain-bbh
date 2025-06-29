@@ -34,40 +34,37 @@ HEADERS = {
 
 TIMEOUT = 8
 
-
 def is_ip_address(url: str) -> bool:
-    """
-    Returns True if the host of the URL is a valid IP address.
-    """
     try:
         host = urlparse(url).hostname
         return bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host))
     except:
         return False
 
+def is_valid_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        return bool(parsed.scheme in ["http", "https"] and parsed.hostname)
+    except:
+        return False
 
 def fix_url_scheme(url):
-    """
-    Automatically switch to HTTPS if the URL includes port 443
-    """
     if ":443" in url and url.startswith("http://"):
         return url.replace("http://", "https://")
     return url
 
-
 def inject_payloads(url: str) -> list[dict]:
-    """
-    Injects payloads into forms or query params of the given URL.
-    Returns list of triggered or suspicious responses.
-    """
     try:
+        url = url.strip().split()[0]  # Remove injected keywords like "inurl:login"
+        url = fix_url_scheme(url)
+        if not is_valid_url(url):
+            logger.warning(f"❌ Skipping malformed URL: {url}")
+            return []
+
         logger.info(f"🧪 Injecting payloads into {url}")
         responses = []
 
-        url = fix_url_scheme(url)
         verify_ssl = not is_ip_address(url)
-
-        # Fetch the page
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT, verify=verify_ssl)
         if r.status_code != 200:
             return []
@@ -75,17 +72,19 @@ def inject_payloads(url: str) -> list[dict]:
         soup = BeautifulSoup(r.text, "html.parser")
         forms = soup.find_all("form")
 
-        # Fallback: query param injection
         if not forms:
             return test_url_params(url)
 
         for form in forms:
             action = form.get("action") or url
             full_url = urljoin(url, action)
+            if not is_valid_url(full_url):
+                continue
+
             method = form.get("method", "get").lower()
             verify_ssl_form = not is_ip_address(full_url)
-
             inputs = form.find_all("input")
+
             for attack_type, payloads in PAYLOADS.items():
                 payload = random.choice(payloads)
                 data = {}
@@ -115,11 +114,7 @@ def inject_payloads(url: str) -> list[dict]:
         logger.exception(f"Injection error: {e}")
         return []
 
-
 def test_url_params(url: str) -> list[dict]:
-    """
-    Adds payloads to existing query params if no forms are found.
-    """
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
     results = []
@@ -127,6 +122,10 @@ def test_url_params(url: str) -> list[dict]:
     for category, payloads in PAYLOADS.items():
         p = random.choice(payloads)
         fuzzed = base + f"?q={p}"
+
+        if not is_valid_url(fuzzed):
+            continue
+
         verify_ssl = not is_ip_address(fuzzed)
         try:
             r = requests.get(fuzzed, headers=HEADERS, timeout=TIMEOUT, verify=verify_ssl)
@@ -143,9 +142,5 @@ def test_url_params(url: str) -> list[dict]:
 
     return results
 
-
 def is_suspicious(html: str) -> bool:
-    """
-    Basic check for common payload triggers in the response.
-    """
     return any(trigger in html.lower() for trigger in ["alert(1)", "syntax error", "localhost", "metadata/"])

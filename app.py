@@ -1,6 +1,8 @@
 import os
 import logging
+import threading
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, current_app
+import json
 from dotenv import load_dotenv
 from flask_wtf import CSRFProtect
 from extensions import db
@@ -13,7 +15,8 @@ from analysis import (
     get_priority_score
 )
 from web_scanner import analyze_web_target
-from dashboard_tracker import get_submission_logs  # ✅ already imported
+from dashboard_tracker import get_submission_logs
+from manualsc import scan_repo, get_manual_scan_status, MANUAL_SCAN_DIR, manual_scan_bp, SCAN_STATUS  # ✅ use correct import
 
 # --------------------------
 # Load environment
@@ -105,11 +108,55 @@ def health_check():
     status_code = 200 if db_ok else 503
     return jsonify({"database": "ok" if db_ok else "error"}), status_code
 
-# ✅ NEW DASHBOARD ROUTE
 @app.route("/dashboard")
 def dashboard():
     bugs = get_submission_logs()
     return render_template("dashboard.html", bugs=bugs)
+
+@app.route("/manual-scan", methods=["GET"])
+def manual_scan():
+    return render_template("manual_scan.html")
+
+# ✅ EXEMPTED from CSRF because it's an API endpoint
+@csrf.exempt
+@app.route("/start_manual_scan", methods=["POST"])
+def start_manual_scan_route():
+    data = request.get_json()
+    repo_url = data.get("repo_url")
+    if not repo_url:
+        return jsonify({"error": "Missing repo_url"}), 400
+
+    session_id = os.urandom(8).hex()
+    threading.Thread(target=scan_repo, args=(session_id, repo_url)).start()
+    return jsonify({"message": "Scan started", "scan_id": session_id})
+
+
+@app.route("/manual_scan_status/<scan_id>", methods=["GET"])
+def manual_scan_status(scan_id):
+    status = SCAN_STATUS.get(scan_id)
+    if not status:
+        return jsonify({"error": "Scan ID not found"}), 404
+
+    # Filter for only JSON-safe values
+    clean_status = {}
+    for k, v in status.items():
+        try:
+            json.dumps(v)  # test if JSON-serializable
+            clean_status[k] = v
+        except (TypeError, OverflowError):
+            clean_status[k] = str(v)  # fallback to string
+
+    return jsonify(clean_status)
+
+
+@csrf.exempt
+@app.route("/manual_scan_results/<session_id>", methods=["GET"])
+def manual_scan_results(session_id):
+    scan_path = os.path.join(MANUAL_SCAN_DIR, session_id, "results.txt")
+    if not os.path.exists(scan_path):
+        return jsonify({"error": "Results not available"}), 404
+    with open(scan_path) as f:
+        return f.read(), 200, {'Content-Type': 'text/plain'}
 
 # --------------------------
 # Entry Point

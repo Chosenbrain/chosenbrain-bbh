@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import requests
 from datetime import datetime
 import json
-
+from urllib.parse import urlparse
 from fetch_live_targets import get_all_live_targets
 from report_generator import generate_bug_report
 from analysis import detailed_ai_analysis
@@ -23,7 +23,7 @@ from factory import create_app
 from notifications import alert, send_bug_report
 from deep_scanner import run_wapiti_scan, run_nikto_scan, run_sqlmap_scan
 from telegram_bot import telegram_app as telegram_bot
-from source_code_scanner import scan_repo_for_vulns  # 🧠 New addition
+from source_code_scanner import scan_repo_for_vulns
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -115,26 +115,25 @@ def run_all_deep_scanners(url: str) -> dict:
         scanners["SourceCode"] = scan_repo_for_vulns(url)
     return scanners
 
+def is_critical_or_high(output):
+    if isinstance(output, str):
+        return "critical" in output.lower() or "high" in output.lower()
+    if isinstance(output, list):
+        return any("critical" in str(item).lower() or "high" in str(item).lower() for item in output)
+    return False
+
 def process_asset(url, platform):
     logger.info(f"Scanning asset: {url}")
-    update_status({
-        "state": "scanning",
-        "target": url,
-        "platform": platform,
-        "started_at": str(datetime.utcnow())
-    })
+    update_status({"state": "scanning", "target": url, "platform": platform, "started_at": str(datetime.utcnow())})
     try:
         scanner_outputs = run_all_deep_scanners(url)
         combined_output = "\n\n".join([f"## {tool} Output\n{output}" for tool, output in scanner_outputs.items()])
 
-        if all("No" in out or out.strip() == "" for out in scanner_outputs.values()):
-            logger.info(f"No bugs found at {url}.")
-            update_status({
-                "state": "idle",
-                "target": url,
-                "platform": platform,
-                "finished_at": str(datetime.utcnow())
-            })
+        interesting = any(is_critical_or_high(output) for output in scanner_outputs.values())
+
+        if not interesting:
+            logger.info("🟡 No critical/high severity output from scanners. Skipping AI analysis to reduce cost.")
+            update_status({"state": "idle", "target": url, "platform": platform, "finished_at": str(datetime.utcnow())})
             return
 
         gpt_analysis = detailed_ai_analysis(combined_output)
@@ -142,12 +141,7 @@ def process_asset(url, platform):
 
         if not report_data or "priority_score" not in report_data:
             logger.warning("⚠️ Incomplete report data. Skipping alert and submission.")
-            update_status({
-                "state": "idle",
-                "target": url,
-                "platform": platform,
-                "finished_at": str(datetime.utcnow())
-            })
+            update_status({"state": "idle", "target": url, "platform": platform, "finished_at": str(datetime.utcnow())})
             return
 
         if is_duplicate_bug(report_data["report"]):
@@ -204,23 +198,12 @@ def process_asset(url, platform):
             "program_link": report_data.get("program_link", "")
         })
 
-        update_status({
-            "state": "idle",
-            "target": url,
-            "platform": platform,
-            "finished_at": str(datetime.utcnow())
-        })
-
+        update_status({"state": "idle", "target": url, "platform": platform, "finished_at": str(datetime.utcnow())})
         logger.info(f"✅ Completed full cycle for {url}")
 
     except Exception as e:
         logger.exception(f"❌ Error processing asset {url}: {e}")
-        update_status({
-            "state": "error",
-            "target": url,
-            "platform": platform,
-            "finished_at": str(datetime.utcnow())
-        })
+        update_status({"state": "error", "target": url, "platform": platform, "finished_at": str(datetime.utcnow())})
         alert(
             message="Error during asset processing",
             platform=platform,
@@ -233,7 +216,6 @@ def process_asset(url, platform):
             submission_note=str(e),
             tool_used="System"
         )
-
 
 def run_full_cycle():
     global current_index
@@ -249,24 +231,37 @@ def run_full_cycle():
 
         logger.info(f"Scanning platform: {platform.upper()} with {len(targets)} targets")
         for url in targets:
-            assets = discover_assets(url)
+            if not url.startswith("http"):
+                url = "https://" + url
+
+            parsed_url = urlparse(url)
+            domain = parsed_url.netloc or parsed_url.path
+            domain = domain.strip().lower()
+
+            if domain.startswith("www."):
+                domain = domain[4:]
+
+            if domain in ["", ".com", ".org"] or any(domain.endswith(ext) for ext in [".jpg", ".png", ".svg"]):
+                logger.warning(f"❌ Skipping malformed or irrelevant domain: {domain}")
+                continue
+
+            logger.info(f"Extracted domain for recon: {domain}")
+            assets = discover_assets(domain)
+
             if not assets:
                 logger.warning(f"No assets found for {url}. Skipping.")
                 continue
 
             for asset in assets:
+                if not asset.startswith("http"):
+                    asset = "https://" + asset
                 process_asset(asset, platform)
 
         current_index += 1
 
     except Exception as e:
         logger.exception("Error during submission cycle")
-        update_status({
-            "state": "error",
-            "target": "N/A",
-            "platform": "N/A",
-            "finished_at": str(datetime.utcnow())
-        })
+        update_status({"state": "error", "target": "N/A", "platform": "N/A", "finished_at": str(datetime.utcnow())})
         alert(
             message="Cycle Failure",
             platform="N/A",

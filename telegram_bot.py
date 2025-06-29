@@ -103,6 +103,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+def send_telegram_message(message):
+    import asyncio
+    from telegram import Bot
+
+    async def _send():
+        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode="Markdown")
+
+    def safe_run_async(coro):
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                raise RuntimeError
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+
+    try:
+        safe_run_async(_send())
+    except Exception as e:
+        print(f"❌ Failed to send Telegram message: {e}")
+
+
 # ---------- Main Entrypoint ----------
 def main():
     logger.info("✅ Telegram bot is running.")

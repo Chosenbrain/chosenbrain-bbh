@@ -1,109 +1,104 @@
-import os
-import logging
-import requests
 import subprocess
-import time
-from shodan import Shodan
-from bs4 import BeautifulSoup
+import requests
+import logging
+import os
+from urllib.parse import urlparse
+from sanitize_urls_fix import clean_asset_urls  # 🔧 Sanitize added
 
-# 🔐 Load Shodan API key from environment variable
-SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("recon_engine")
 
-# 🔍 Initialize Shodan client
-client = Shodan(SHODAN_API_KEY)
+DIRSEARCH_PATH = "/root/dirsearch/dirsearch.py"  # Adjust path if needed
+ARJUN_MODULE = "arjun"  # Assumes Arjun is installed
+TEMP_URL_FILE = "/tmp/arjun_urls.txt"
 
-# ------------------ SHODAN RECON ------------------
-def shodan_search(query: str, max_results: int = 50):
-    logger.info(f"🔍 Shodan search: {query}")
-    results = []
+def normalize_url(url: str) -> str:
+    if not url.startswith("http"):
+        return "https://" + url
+    return url
+
+def run_command(command):
     try:
-        res = client.search(query, limit=max_results)
-        for match in res['matches']:
-            ip = match.get('ip_str')
-            port = match.get('port')
-            org = match.get('org', 'n/a')
-            host = f"{ip}:{port}"
-            results.append(f"{host} ({org})")
-    except Exception as e:
-        logger.error(f"❌ Shodan error: {e}")
-    return results
-
-# ------------------ GOOGLE DORKING ------------------
-def google_dork_search(dork: str, pages: int = 1):
-    logger.info(f"🕵️ Google Dorking: {dork}")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-    found = set()
-    for page in range(pages):
-        time.sleep(2)
-        start = page * 10
-        url = f"https://www.google.com/search?q={dork}&start={start}"
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(resp.text, "html.parser")
-            links = soup.select("a")
-            for a in links:
-                href = a.get("href")
-                if href and href.startswith("/url?q="):
-                    actual_url = href.split("/url?q=")[1].split("&sa=")[0]
-                    found.add(actual_url)
-        except Exception as e:
-            logger.warning(f"⚠️ Dork scrape failed on page {page}: {e}")
-    return list(found)
-
-# ------------------ SUBFINDER ------------------
-def subfinder_scan(domain: str):
-    logger.info(f"🤖 Subfinder scanning: {domain}")
-    try:
-        result = subprocess.check_output(["subfinder", "-d", domain, "-silent"], stderr=subprocess.DEVNULL)
-        return result.decode().splitlines()
-    except Exception as e:
-        logger.warning(f"Subfinder failed: {e}")
+        output = subprocess.check_output(command, shell=True, stderr=subprocess.DEVNULL)
+        return output.decode().splitlines()
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"Command failed: {e}")
         return []
 
-# ------------------ HAKRAWLER ------------------
-def hakrawler_scan(domain: str):
-    logger.info(f"🤖 Hakrawler scanning: {domain}")
-    try:
-        result = subprocess.check_output(["hakrawler", "-url", f"https://{domain}", "-depth", "1"], stderr=subprocess.DEVNULL)
-        return result.decode().splitlines()
-    except Exception as e:
-        logger.warning(f"Hakrawler failed: {e}")
-        return []
+def subfinder(domain):
+    logger.info(f"🌐 Subfinder: {domain}")
+    return run_command(f"subfinder -d {domain} -silent")
 
-# ------------------ ARJUN ------------------
-def arjun_scan(domain: str):
-    logger.info(f"🔍 Arjun scanning: {domain}")
+def hakrawler_scan(domain):
+    logger.info(f"🔎 Hakrawler: {domain}")
+    return run_command(f"echo https://{domain} | hakrawler -subs -depth 1")
+
+def arjun_scan(domain):
+    logger.info(f"🔧 Arjun: {domain}")
     try:
-        result = subprocess.check_output(["python3", "~/Arjun/arjun.py", "--urls", f"https://{domain}"], stderr=subprocess.DEVNULL)
-        return result.decode().splitlines()
+        with open(TEMP_URL_FILE, "w") as f:
+            f.write(f"https://{domain}")
+        return run_command(f"python3 -m {ARJUN_MODULE} --urls {TEMP_URL_FILE}")
     except Exception as e:
         logger.warning(f"Arjun failed: {e}")
         return []
 
-# ------------------ COMBINED RECON ------------------
-def recon_domain(keyword: str):
-    logger.info(f"🌐 Recon on keyword: {keyword}")
-    shodan_results = shodan_search(keyword)
-    dork_results = google_dork_search(f"site:{keyword}")
-    subfinder_results = subfinder_scan(keyword)
-    hakrawler_results = hakrawler_scan(keyword)
-    arjun_results = arjun_scan(keyword)
+def dirsearch_scan(domain):
+    logger.info(f"📁 Dirsearch: {domain}")
+    try:
+        report_file = "/tmp/dirsearch.txt"
+        command = f"python3 {DIRSEARCH_PATH} -u https://{domain} -e php,asp,aspx,jsp,html,js,txt -o {report_file} --output-format plain"
+        subprocess.run(command, shell=True, stderr=subprocess.DEVNULL)
+        if os.path.exists(report_file):
+            with open(report_file, "r") as f:
+                return [line.strip() for line in f if line.strip()]
+    except Exception as e:
+        logger.warning(f"Dirsearch failed: {e}")
+    return []
 
-    combined = list(set(shodan_results + dork_results + subfinder_results + hakrawler_results + arjun_results))
-    logger.info(f"🔎 Found {len(combined)} unique assets.")
-    return combined
+def wayback_scan(domain):
+    logger.info(f"📦 Wayback Machine: {domain}")
+    try:
+        response = requests.get(
+            f"http://web.archive.org/cdx/search/cdx?url=*.{domain}/*&output=text&fl=original&collapse=urlkey",
+            timeout=10
+        )
+        return response.text.splitlines()
+    except Exception as e:
+        logger.warning(f"Wayback failed: {e}")
+        return []
 
-# ✅ Required by submission orchestrator
-def discover_assets(scope: str) -> list:
-    return recon_domain(scope)
+def google_dorks(domain):
+    logger.info(f"🕵️ Google Dorking: site:{domain}")
+    return [
+        f"https://www.google.com/search?q=site:{domain}+inurl:login",
+        f"https://www.google.com/search?q=site:{domain}+ext:php",
+        f"https://www.google.com/search?q=site:{domain}+ext:js",
+        f"https://www.google.com/search?q=site:{domain}+inurl:admin"
+    ]
 
-# Test run
-if __name__ == "__main__":
-    test_scope = "tesla.com"
-    assets = discover_assets(test_scope)
-    for asset in assets:
-        print(" -", asset)
+def shodan_scan(domain):
+    logger.info(f"🔍 Shodan search: {domain}")
+    return [f"https://www.shodan.io/search?query=hostname:{domain}"]
+
+def discover_assets(domain: str):
+    domain = domain.strip().lower()
+    if domain.startswith("http"):
+        domain = urlparse(domain).netloc
+
+    logger.info(f"🔭 Running deep recon on: {domain}")
+    assets = set()
+
+    assets.update(subfinder(domain))
+    assets.update(hakrawler_scan(domain))
+    assets.update(arjun_scan(domain))
+    assets.update(dirsearch_scan(domain))
+    assets.update(wayback_scan(domain))
+    assets.update(google_dorks(domain))
+    assets.update(shodan_scan(domain))
+
+    # Normalize + Sanitize with custom filter
+    cleaned = clean_asset_urls([normalize_url(url.strip()) for url in assets if url.strip()])
+    logger.info(f"✅ Found {len(cleaned)} unique URLs.")
+    return cleaned
+

@@ -4,15 +4,16 @@ from flask import Flask
 from flask_wtf import CSRFProtect
 from celery import Celery
 from dotenv import load_dotenv
-
-from config     import Config
+from flask_socketio import SocketIO
+from config import Config
 from extensions import db, migrate
 
-# load .env into os.environ before reading Config
+# Load environment variables
 load_dotenv()
 
-# CSRF for any forms you might use
+# Initialize extensions
 csrf = CSRFProtect()
+socketio = SocketIO(cors_allowed_origins="*")  # ✅ Define socketio instance
 
 def create_app():
     app = Flask(__name__)
@@ -20,10 +21,10 @@ def create_app():
 
     db.init_app(app)
     migrate.init_app(app, db)
-
-    from models import Report  # ✅ Only import what's still relevant
-
     csrf.init_app(app)
+    socketio.init_app(app)  # ✅ Attach SocketIO to app
+
+    from models import Report  # Only import relevant models
     return app
 
 def make_celery(app=None):
